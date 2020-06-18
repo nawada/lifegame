@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Life game with Table tag</title>
+
+    <style>
+        .row {
+            display: block;
+            line-height: 15px;
+        }
+
+        .cell {
+            width: 10px;
+            height: 10px;
+            display: inline-block;
+            border: 1px dotted #000000;
+            margin-left: 1px;
+            margin-right: 1px;
+        }
+
+        .cell__dead {
+            background-color: #ffffff;
+        }
+
+        .cell__alive {
+            background-color: #000000;
+        }
+    </style>
+</head>
+<body>
+
+<div>
+    <label for="row">Row Num:</label> <input type="number" name="row" id="row" min="3" value="50">
+    <label for="column">Column Num:</label> <input type="number" name="column" id="column" min="3" value="50">
+</div>
+
+<div>
+    <label>Step:
+        <button id="step">▶</button>
+    </label>
+    <label>Play:
+        <button id="play">▶▶</button>
+    </label>
+    <label for="interval"><input type="number" name="interval" id="interval" value="50" min="50" step="1"></label>
+    <label>Stop:
+        <button id="stop">■</button>
+    </label>
+    <label>Clear:
+        <button id="clear">C</button>
+    </label>
+</div>
+
+<hr>
+
+<div id="render_area"></div>
+
+<script>
+    (() => {
+        const clickCell = (event) => {
+            const classList = event.target.classList;
+            if (classList.contains('cell__dead')) {
+                // 現在死んでいる場合
+                classList.remove('cell__dead');
+                classList.add('cell__alive');
+                event.target.dataset.isAlive = '1';
+            } else {
+                // 現在生きている場合
+                classList.remove('cell__alive');
+                classList.add('cell__dead');
+                event.target.dataset.isAlive = '0';
+            }
+        };
+
+        const renderCells = () => {
+            const rowCount = document.querySelector('#row').value;
+            const colCount = document.querySelector('#column').value;
+            const renderArea = document.querySelector('#render_area');
+            renderArea.innerHTML = '';
+
+            for (let i = 0; i < rowCount; i++) {
+                const rowElement = document.createElement('span');
+                rowElement.classList.add('row');
+
+                for (let j = 0; j < colCount; j++) {
+                    const cellElement = document.createElement('span');
+                    cellElement.id = `cell-${i}-${j}`;
+                    cellElement.classList.add('cell', 'cell__dead');
+                    cellElement.dataset.row = `${i}`;
+                    cellElement.dataset.col = `${j}`;
+                    cellElement.addEventListener('click', clickCell);
+                    rowElement.appendChild(cellElement);
+                }
+
+                renderArea.appendChild(rowElement);
+            }
+        };
+
+        const checkNextGenerationStatus = (cell) => {
+            const cellAlive = cell.classList.contains('cell__alive');
+            cell.dataset.isAlive = cellAlive ? '1' : '0';   // 現在の状況を保存する. 1=生きている,0=死んでいる
+            const cellRow = parseInt(cell.dataset.row);
+            const cellCol = parseInt(cell.dataset.col);
+
+            let aliveCount = 0;
+            // 周囲8マスの状況を確認
+            for (let i = -1; i <= 1; i++) {
+                for (let j = -1; j <= 1; j++) {
+                    if (i === 0 && j === 0) continue;   // 自分は飛ばす
+
+                    const checkCell = document.querySelector(`#cell-${cellRow + i}-${cellCol + j}`);
+                    if (!checkCell) continue;    // 存在しない場合飛ばす
+
+                    const isAlive = checkCell.dataset.isAlive;
+                    if (isAlive === undefined) {
+                        // 未定義だった場合
+                        continue;
+                    }
+
+                    // 生存している場合
+                    if (parseInt(isAlive) === 1) aliveCount++;
+                }
+            }
+
+            // 次世代の判定
+            if (aliveCount >= 4) {
+                // 過密により死亡
+                cell.dataset.willAlive = '0';
+                // console.log(`過密: ${cell.id}: ${aliveCount}`);
+            } else if (aliveCount <= 1) {
+                // 過疎により死亡
+                cell.dataset.willAlive = '0';
+            } else if (cellAlive === false && aliveCount === 3) {
+                // 誕生
+                cell.dataset.willAlive = '1';
+                // console.log(`誕生: ${cell.id}: ${aliveCount}`);
+            } else if (cellAlive && (aliveCount === 2 || aliveCount === 3)) {
+                // 生存
+                cell.dataset.willAlive = '1';
+                // console.log(`生存: ${cell.id}: ${aliveCount}`);
+            }
+        };
+        const updateCellStatus = (cell) => {
+            const willAlive = parseInt(cell.dataset.willAlive);
+            if (willAlive === 1) {
+                cell.dataset.isAlive = '1';
+                cell.classList.add('cell__alive');
+                cell.classList.remove('cell__dead');
+            } else {
+                cell.dataset.isAlive = '0';
+                cell.classList.add('cell__dead');
+                cell.classList.remove('cell__alive');
+            }
+        };
+        const step = () => {
+            const cells = document.querySelectorAll('.cell');
+            // FIXME: ループしまくってるのでどうにかしたい
+            cells.forEach(checkNextGenerationStatus);
+            cells.forEach(updateCellStatus);
+        };
+
+        // 初期描画
+        renderCells();
+
+        // イベント設定
+        let intervalId, interval;
+        document.querySelector('#row').addEventListener('change', renderCells);
+        document.querySelector('#column').addEventListener('change', renderCells);
+        document.querySelector('#step').addEventListener('click', step);
+        document.querySelector('#play').addEventListener('click', () => {
+            interval = parseInt(document.querySelector('#interval').value);
+            intervalId = setInterval(step, interval);
+        });
+        document.querySelector('#stop').addEventListener('click', () => {
+            clearInterval(intervalId);
+            intervalId = null;
+        });
+        document.querySelector('#clear').addEventListener('click', () => {
+            if (intervalId) {
+                clearInterval(intervalId);
+                intervalId = null;
+            }
+            renderCells();
+        });
+        document.querySelector('#interval').addEventListener('change', (event) => {
+            interval = parseInt(event.target.value);
+            if (intervalId) {
+                // 実行中
+                clearInterval(intervalId);
+                intervalId = setInterval(step, interval);
+            }
+        });
+    })();
+</script>
+</body>
+</html>
